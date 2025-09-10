@@ -39,7 +39,7 @@ def load_example(source, image_id):
         ex = nocaps_index.get(image_id)
         if ex is None:
             return None
-        return ex["image"], ex["annotations_captions"][0], f"{image_id}.png"
+        return ex["image"], ex["annotations_captions"][0], f"{image_id}"
 
 def prepare_evaluation(dataset, root):
     captions_dir, images_dir, captions_gen_dir, images_gen_dir = ensure_dirs(root)
