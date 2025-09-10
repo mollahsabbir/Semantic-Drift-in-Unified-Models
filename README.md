@@ -30,8 +30,6 @@ pip install -r requirements.txt
 ## 💻 Usage 
 
 ### MCD and SDR
-⚠️ [Work in progress.]
-
 Evaluation data should be organized as follows:
 ```
 <evaluation_data_root>/
@@ -57,10 +55,10 @@ Evaluation data should be organized as follows:
 
 And the `csv` files used to store the captions should have the following two headings: `filename`, `caption`.
 
-After making sure that the generated data along with the `generation 0` source data are in the correct format, run the following command to calculate `mcd`, `sdr`, and `mgg` metrics as mentioned in the paper.
+After making sure that the generated data along with the `generation 0` source data are in the correct format, run the following command to calculate `mcd`, and `sdr` metrics as mentioned in the paper:
 
 ```bash
-python measure-drift.py -data <path-to-evaluation-data> -out <path-to-output-folder>
+python semantic-drift/mcd-sdr.py --data /path/to/data --out temp --model-name <model-name>
 ```
 
 ### MGG
