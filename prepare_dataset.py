@@ -19,8 +19,8 @@ nocaps_val = nocaps["validation"]
 nocaps_index = {ex["image_file_name"]: ex for ex in nocaps_val}
 
 def ensure_dirs(root, gen_index=0):
-    captions_dir = os.path.join(root, "captions-first")
-    images_dir = os.path.join(root, "images-first")
+    captions_dir = os.path.join(root, "text-first")
+    images_dir = os.path.join(root, "image-first")
     os.makedirs(captions_dir, exist_ok=True)
     os.makedirs(images_dir, exist_ok=True)
     captions_gen_dir = os.path.join(captions_dir, f"gen-{gen_index}")

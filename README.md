@@ -35,7 +35,7 @@ pip install -r requirements.txt
 Evaluation data should be organized as follows:
 ```
 <evaluation_data_root>/
-├── captions-first/
+├── text-first/
 │   ├── gen-0.csv
 │   ├── gen-1
 │   │   ├── image1.png
@@ -44,7 +44,7 @@ Evaluation data should be organized as follows:
 │   ├── gen-2.csv
 │   ├── ...
 │   ├── gen-20.csv
-├── images-first/
+├── image-first/
 │   ├── gen-0
 │   │   ├── image1.png
 │   │   ├── image2.png
@@ -69,7 +69,7 @@ python measure-drift.py -data <path-to-evaluation-data> -out <path-to-output-fol
 
 2. Run:
 ```
-python semantic-drift/mgg.py --imagedir /path/to/data/captions-first/     --metafile geneval_metadata.jsonl     --resultname <exp-name>   --resultdir /directory/to/save/results
+python semantic-drift/mgg.py --imagedir /path/to/data/text-first/     --metafile geneval_metadata.jsonl     --resultname <exp-name>   --resultdir /directory/to/save/results
 ```
 
 
