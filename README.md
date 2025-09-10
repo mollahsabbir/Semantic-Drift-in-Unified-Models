@@ -28,6 +28,8 @@ pip install -r requirements.txt
 ```
 
 ## 💻 Usage 
+
+### MCD and SDR
 ⚠️ [Work in progress.]
 
 Evaluation data should be organized as follows:
@@ -60,6 +62,16 @@ After making sure that the generated data along with the `generation 0` source d
 ```bash
 python measure-drift.py -data <path-to-evaluation-data> -out <path-to-output-folder>
 ```
+
+### MGG
+
+1. Copy Geneval dataset metadata from: [here](https://github.com/JiuhaiChen/BLIP3o/blob/Qwen3-Siglip2/eval/geneval/geneval_prompt.jsonl), or [here](https://github.com/djghosh13/geneval/blob/main/prompts/evaluation_metadata.jsonl).
+
+2. Run:
+```
+python semantic-drift/mgg.py --imagedir /path/to/data/captions-first/     --metafile geneval_metadata.jsonl     --resultname <exp-name>   --resultdir /directory/to/save/results
+```
+
 
 ## 📜 Citation
 If you find our work and this repository useful, please consider giving our repository a star and citing our paper as follows:
