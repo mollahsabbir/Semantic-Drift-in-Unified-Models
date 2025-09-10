@@ -29,9 +29,11 @@ import timm
 from torchvision.transforms import ToPILImage
 from collections import defaultdict
 from sentence_transformers import SentenceTransformer
+from scipy.optimize import curve_fit
 
 TEXT_FIRST = "text-first"
 IMAGE_FIRST = "image-first"
+MAX_GENERATIONS = 20
 
 def open_annotation_file(csv_path):
     df = pd.read_csv(csv_path, encoding="latin1")
@@ -200,9 +202,15 @@ def get_image_dir_at_gen(data_dir, eval_type, gen):
 def get_csv_dir_at_gen(data_dir, eval_type, gen):
     return os.path.join(data_dir, eval_type, f"gen-{gen}.csv")
 
+def get_gen_range(eval_type, to_modality, max_generations=MAX_GENERATIONS):
+    if eval_type == TEXT_FIRST:
+        return range(2, max_generations + 1, 2) if to_modality == "text" else range(1, max_generations, 2)
+    elif eval_type == IMAGE_FIRST:
+        return range(2, max_generations + 1, 2) if to_modality=="image" else range(1, max_generations, 2)
+    else:
+        raise ValueError(f"Unknown eval_type: {eval_type}")
 
-
-def images_first_scores(eval_type, data_dir, to_modality, scorer, max_generations=20):
+def image_first_scores(eval_type, data_dir, to_modality, scorer, max_generations=MAX_GENERATIONS):
     gen0_dir = get_image_dir_at_gen(data_dir, eval_type, gen=0)
     captions_path = get_csv_dir_at_gen(data_dir, eval_type, gen=1)
     df = open_annotation_file(captions_path)
@@ -212,7 +220,7 @@ def images_first_scores(eval_type, data_dir, to_modality, scorer, max_generation
     baseline_features = [scorer.get_image_features(open_image(f, gen0_dir).convert("RGB")) for f in filenames]
     print("Finished Baseline Features Extraction")
 
-    gen_range = range(2, max_generations+1, 2) if to_modality=="image" else range(1, max_generations, 2)
+    gen_range = get_gen_range(eval_type, to_modality, max_generations)
     
     scores = {fname:{} for fname in filenames}
 
@@ -245,14 +253,14 @@ def images_first_scores(eval_type, data_dir, to_modality, scorer, max_generation
         else:
             print(f"Generation {gen} has no scores.")
 
-    return scores, raw_scores, np.mean(gen_mean_scores)
+    return scores, raw_scores, gen_mean_scores
 
 
-def captions_first_scores(eval_type,
+def text_first_scores(eval_type,
                           data_dir, 
                           to_modality,
                           scorer,
-                          max_generations=20):
+                          max_generations=MAX_GENERATIONS):
 
     captions_path = os.path.join(data_dir, eval_type, "gen-0.csv")
     captions_df = open_annotation_file(captions_path)
@@ -266,10 +274,7 @@ def captions_first_scores(eval_type,
     print("Finished Baseline Features Extraction")
 
     # Determine generation indices to score
-    if to_modality == "image":
-        gen_range = range(1, max_generations, 2)
-    elif to_modality == "text":
-        gen_range = range(2, max_generations + 1, 2)
+    gen_range = get_gen_range(eval_type, to_modality, max_generations)
 
     scores = {fname: {} for fname in filenames}
 
@@ -305,8 +310,30 @@ def captions_first_scores(eval_type,
         else:
             print(f"Generation {gen} has no scores.")
 
-    return scores, raw_scores, np.mean(gen_mean_scores)
+    return scores, raw_scores, gen_mean_scores
 
+
+def exp_decay(x, a, b, c):
+    return a * np.exp(-b * x) + c
+
+
+def plot_and_save(x_data, y_data, params, title, save_path):
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.scatter(x_data, y_data, label="Mean scores", color="blue")
+    if params is not None and not any(np.isnan(params)):
+        a, b, c = params
+        x_fit = np.linspace(min(x_data), max(x_data), 100)
+        y_fit = exp_decay(x_fit, a, b, c)
+        plt.plot(x_fit, y_fit, label=f"Fit: a={a:.2f}, b={b:.2f}, c={c:.2f}", color="red", linestyle=":")
+    plt.xlabel("Generation")
+    plt.ylabel("Similarity")
+    plt.title(title)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
 
 def main():
     evaluations = [
@@ -326,6 +353,8 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     all_raw_scores = []
+    all_params = []
+    all_gen_means = []
 
     for evaluation in evaluations:
         eval_type = evaluation["eval_type"]
@@ -337,31 +366,50 @@ def main():
         result_name = full_result_name(model_name, eval_type, from_modality, to_modality, scorer_name)
         result_path = os.path.join(args.out, result_name)
 
-        gen_mean_scores = []
-
         if os.path.exists(result_path):
             print(f"Skipping evaluation (already exists): {result_path}")
-            # Load the existing raw_scores
             with open(result_path, "rb") as f:
-                _, raw_scores, gen_mean_score = pickle.load(f)
+                sample_scores, raw_scores, gen_mean_scores = pickle.load(f)
         else:
             print(f"Running evaluation: {eval_type}, from {from_modality} to {to_modality}, with scorer {scorer_name}")
             if eval_type == TEXT_FIRST:
-                _, raw_scores, gen_mean_score = captions_first_scores(eval_type, args.data, to_modality, scorer, max_generations=20)
+                sample_scores, raw_scores, gen_mean_scores = text_first_scores(eval_type, args.data, to_modality, scorer, max_generations=MAX_GENERATIONS)
             elif eval_type == IMAGE_FIRST:
-                _, raw_scores, gen_mean_score = images_first_scores(eval_type, args.data, to_modality, scorer, max_generations=20)
+                sample_scores, raw_scores, gen_mean_scores = image_first_scores(eval_type, args.data, to_modality, scorer, max_generations=MAX_GENERATIONS)
             else:
                 raise ValueError(f"Unknown eval_type: {eval_type}")
 
             os.makedirs(args.out, exist_ok=True)
             with open(result_path, "wb") as f:
-                pickle.dump((_, raw_scores, gen_mean_score), f)
+                pickle.dump((sample_scores, raw_scores, gen_mean_scores), f)
 
-        print(f"MCD ({from_modality}-to-{to_modality}): {gen_mean_score:.4f}")
-        gen_mean_scores.append(gen_mean_score)
+        print(f"MCD ({from_modality}-to-{to_modality}): {np.mean(gen_mean_scores):.4f}")
+        all_gen_means.append(gen_mean_scores)
         all_raw_scores.append(raw_scores)
 
-    print(f"MCD: {np.mean(gen_mean_score):.4f}")
+        x_data = list(get_gen_range(eval_type, to_modality, MAX_GENERATIONS))
+        params, _ = curve_fit(exp_decay, x_data, gen_mean_scores, p0=(1, 0.1, 0), maxfev=5000)
+        a, b, c = params
+        all_params.append(params)
+        print(f"{evaluation['from']}-to-{evaluation['to']} fitted params: a={a:.4f}, b={b:.4f}, c={c:.4f}")
+
+        save_path = os.path.join(args.out, f"{result_name}.png")
+        title = f"{from_modality}-to-{to_modality} ({scorer_name})"
+        plot_and_save(x_data, gen_mean_scores, params, title, save_path)
+
+    print(f"MCD: {np.mean([np.mean(g) for g in all_gen_means]):.4f}")
+
+    all_params = np.array(all_params)
+    avg_a, avg_b, avg_c = np.mean(all_params, axis=0)
+    print(f"SDR: a={avg_a:.4f}, b={avg_b:.4f}, c={avg_c:.4f}")
+
+    # Final averaged curve
+    min_len = min(len(g) for g in all_gen_means)
+    avg_curve = np.mean([g[:min_len] for g in all_gen_means], axis=0)
+    x_data = list(range(1, min_len + 1))
+    final_params, _ = curve_fit(exp_decay, x_data, avg_curve, p0=(1, 0.1, 0), maxfev=5000)
+    plot_and_save(x_data, avg_curve, final_params, "Final Averaged SDR", os.path.join(args.out, "final.png"))
+
 
 
 if __name__ == "__main__":
